@@ -13,7 +13,8 @@ target_include_directories(string_utils_lib PUBLIC include)
 add_executable(string_utils_app src/main.cpp)
 target_link_libraries(string_utils_app PRIVATE string_utils_lib)
 
-add_subdirectory(third_party/googletest)
+# Ищем GoogleTest в системе вместо добавления subdirectory
+find_package(GTest REQUIRED)
 
 add_executable(string_utils_test tests/string_utils_test.cpp)
 target_link_libraries(string_utils_test 

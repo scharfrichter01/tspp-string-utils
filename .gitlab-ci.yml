@@ -2,13 +2,10 @@ variables:
   GIT_STRATEGY: clone
   GIT_DEPTH: 20
   GITLAB_TOKEN: $GIT_ACCESS_TOKEN
-  GIT_URL: "http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru/najmudin051/tspp-string-utils.git"
+  DEBIAN_FRONTEND: noninteractive
 
 before_script:
-  - git config --global credential.helper store
-  - echo "http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru" > ~/.git-credentials
-  - apt-get update -qq
-  - apt-get install -y -qq cmake g++ make doxygen graphviz > /dev/null
+  - git config --global url."http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru/".insteadOf "http://vgit.mirea.ru/"
 
 stages:
   - build
@@ -16,19 +13,19 @@ stages:
   - doxygen
   - pages
 
-image: ubuntu:22.04
-
-variables:
-  DEBIAN_FRONTEND: noninteractive
-  GIT_SUBMODULE_STRATEGY: recursive
-
-before_script:
-  - apt-get update -qq
-  - apt-get install -y -qq cmake g++ make doxygen graphviz > /dev/null
-
 build:
   stage: build
+  tags:
+    - ubuntu
   script:
+    - apt-get update -qq
+    - apt-get install -y -qq cmake g++ make libgtest-dev
+    # Собираем GoogleTest из исходников (для Ubuntu)
+    - cd /usr/src/gtest
+    - cmake .
+    - make
+    - cp lib/*.a /usr/lib/ || true
+    - cd $CI_PROJECT_DIR
     - mkdir -p build && cd build
     - cmake ..
     - cmake --build .
@@ -39,13 +36,21 @@ build:
 
 test:
   stage: test
+  tags:
+    - ubuntu
   script:
     - cd build
     - ctest --output-on-failure
+  dependencies:
+    - build
 
 doxygen:
   stage: doxygen
+  tags:
+    - ubuntu
   script:
+    - apt-get update -qq
+    - apt-get install -y -qq doxygen graphviz
     - doxygen Doxyfile
   artifacts:
     paths:
@@ -54,13 +59,15 @@ doxygen:
 
 pages:
   stage: pages
-  dependencies:
-    - doxygen
+  tags:
+    - ubuntu
   script:
     - mkdir -p public
     - cp -r doc/html/* public/
   artifacts:
     paths:
       - public
+  dependencies:
+    - doxygen
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
