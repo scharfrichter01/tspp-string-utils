@@ -1,3 +1,15 @@
+variables:
+  GIT_STRATEGY: clone
+  GIT_DEPTH: 20
+  GITLAB_TOKEN: $GIT_ACCESS_TOKEN
+  GIT_URL: "http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru/najmudin051/tspp-string-utils.git"
+
+before_script:
+  - git config --global credential.helper store
+  - echo "http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru" > ~/.git-credentials
+  - apt-get update -qq
+  - apt-get install -y -qq cmake g++ make doxygen graphviz > /dev/null
+
 stages:
   - build
   - test
