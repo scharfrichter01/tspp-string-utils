@@ -1,4 +1,3 @@
-# Директории сборки CMake
 build/
 cmake-build-*/
 CMakeCache.txt
@@ -6,7 +5,6 @@ CMakeFiles/
 Makefile
 cmake_install.cmake
 
-# Исполняемые файлы и объекты
 *.o
 *.obj
 *.exe
@@ -17,17 +15,14 @@ cmake_install.cmake
 *.dylib
 string_utils_app
 
-# Документация Doxygen (генерируется заново)
 doc/
 public/
 
-# Файлы IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS-specific
 .DS_Store
 Thumbs.db

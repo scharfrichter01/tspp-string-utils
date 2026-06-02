@@ -1,0 +1,54 @@
+stages:
+  - build
+  - test
+  - doxygen
+  - pages
+
+image: ubuntu:22.04
+
+variables:
+  DEBIAN_FRONTEND: noninteractive
+  GIT_SUBMODULE_STRATEGY: recursive
+
+before_script:
+  - apt-get update -qq
+  - apt-get install -y -qq cmake g++ make doxygen graphviz > /dev/null
+
+build:
+  stage: build
+  script:
+    - mkdir -p build && cd build
+    - cmake ..
+    - cmake --build .
+  artifacts:
+    paths:
+      - build/string_utils_app
+    expire_in: 1 hour
+
+test:
+  stage: test
+  script:
+    - cd build
+    - ctest --output-on-failure
+
+doxygen:
+  stage: doxygen
+  script:
+    - doxygen Doxyfile
+  artifacts:
+    paths:
+      - doc/html
+    expire_in: 1 week
+
+pages:
+  stage: pages
+  dependencies:
+    - doxygen
+  script:
+    - mkdir -p public
+    - cp -r doc/html/* public/
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
