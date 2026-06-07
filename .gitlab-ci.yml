@@ -12,7 +12,6 @@ variables:
   RPM_PACKAGE_NAME: "$APP_NAME"
   RPM_PACKAGE_VER: "0.0.0"
 
-# ---------- Шаблон сборки ----------
 .build-template:
   stage: build
   script:
@@ -25,20 +24,18 @@ variables:
     expire_in: 1 hour
     paths:
       - build/string_utils
-      - build/test
+      - build/string_utils_test
       - build/asan_test
 
-# ---------- Обычные unit-тесты ----------
 .unit-test-template:
   stage: unit-test
   script:
-    - ./build/test --gtest_output=xml:report.xml
+    - ./build/string_utils_test --gtest_output=xml:report.xml
   artifacts:
     expire_in: 1 hour
     reports:
       junit: report.xml
 
-# ---------- Asan-тесты с аннотацией сущностей ----------
 .asan-test-template:
   stage: unit-test
   script:
@@ -64,7 +61,6 @@ variables:
     reports:
       junit: asan_report.xml
 
-# ---------- Проверка установки пакета ----------
 .package-test-template:
   stage: package-test
   script:
@@ -81,18 +77,15 @@ variables:
     - string-utils are_anagrams "listen" "silent"
     - string-utils word_count "one two three four"
 
-# ========== Джобы сборки ==========
 build-astra:
   extends: .build-template
   tags:
     - astra
   before_script:
-    # Собираем GTest из исходников
     - apt-get update && apt-get install -y libgtest-dev cmake g++
     - cd /usr/src/gtest
     - cmake CMakeLists.txt
     - make
-    # Копируем библиотеки (они лежат прямо в /usr/src/gtest, не в lib/)
     - cp *.a /usr/lib/
     - cd -
 
@@ -101,10 +94,8 @@ build-redos:
   tags:
     - redos
   before_script:
-    # Устанавливаем gmock-devel тоже, иначе CMake ругается
     - dnf install -y gtest-devel gmock-devel cmake gcc-c++
 
-# ========== Обычные unit-тесты ==========
 unit-test-astra:
   extends: .unit-test-template
   tags:
@@ -121,7 +112,6 @@ unit-test-redos:
     - job: build-redos
       artifacts: true
 
-# ========== Asan-тесты ==========
 asan-test-astra:
   extends: .asan-test-template
   tags:
@@ -138,7 +128,6 @@ asan-test-redos:
     - job: build-redos
       artifacts: true
 
-# ========== Упаковка ==========
 package-astra:
   stage: package
   tags:
@@ -228,7 +217,6 @@ package-redos:
     paths:
       - "$RPM_PACKAGE_NAME-$RPM_PACKAGE_VER-1.*.rpm"
 
-# ========== Тесты установки пакетов ==========
 package-test-redos:
   extends: .package-test-template
   tags:
@@ -253,7 +241,6 @@ package-test-astra:
     VERIFY_CMD: "dpkg -s string-utils"
     LIST_FILES_CMD: "dpkg -L string-utils"
 
-# ========== Документация ==========
 doxygen:
   stage: docs
   tags:

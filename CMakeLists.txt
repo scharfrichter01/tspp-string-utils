@@ -15,8 +15,11 @@ target_link_libraries(string_utils PRIVATE string_utils_lib)
 
 find_package(GTest REQUIRED)
 
-add_executable(test tests/string_utils_test.cpp)
-target_link_libraries(test string_utils_lib GTest::gtest_main)
+add_executable(string_utils_test tests/string_utils_test.cpp)
+target_link_libraries(string_utils_test 
+    string_utils_lib 
+    GTest::gtest_main
+)
 
 add_executable(asan_test tests/string_utils_test.cpp)
 target_link_libraries(asan_test string_utils_lib GTest::gtest_main)
