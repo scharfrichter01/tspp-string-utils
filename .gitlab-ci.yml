@@ -38,10 +38,16 @@ variables:
 
 .asan-test-template:
   stage: unit-test
+  timeout: 5 minutes
   script:
+    - echo "=== START ASAN TEST ==="
+    - export ASAN_OPTIONS=verbosity=1:detect_leaks=0
     - ./build/asan_test --gtest_output=xml:asan_report.xml
+    - echo "=== TEST FINISHED ==="
+    - ls -l asan_report.xml
     - |
       if [ -f asan_report.xml ]; then
+        echo "=== Processing XML ==="
         head -1 asan_report.xml > header.xml
         tail -n +2 asan_report.xml > body.xml
         {
@@ -53,8 +59,9 @@ variables:
         } > asan_report_new.xml
         mv asan_report_new.xml asan_report.xml
         rm -f header.xml body.xml
+        echo "=== XML PROCESSED ==="
       else
-        echo "WARNING: asan_report.xml not found, skipping annotation"
+        echo "WARNING: asan_report.xml not found"
       fi
   artifacts:
     expire_in: 1 hour
