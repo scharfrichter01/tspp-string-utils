@@ -47,7 +47,7 @@ variables:
         {
           cat header.xml
           echo "<!-- Tested entities from string_utils.h: -->"
-          grep -E '^[a-zA-Z_].+\(.*\);' ../include/string_utils.h | sed 's/^/    /' || echo "    (no functions found)"
+          grep -E '^[a-zA-Z_].+\(.*\);' include/string_utils.h | sed 's/^/    /' || echo "    (no functions found)"
           echo "-->"
           cat body.xml
         } > asan_report_new.xml
@@ -68,11 +68,11 @@ variables:
     - $VERIFY_CMD
     - $LIST_FILES_CMD
     - string-utils trim "   hello world   "
-    - string-utils trim hello world
+    - string-utils trim "hello world"
     - string-utils split "a,b,c" ","
     - string-utils split "a, b, c" ", "
     - string-utils replace "this is a test" "is " "was "
-    - string-utils replace this is a test is was
+    - string-utils replace "this is a test" "is" "was"
     - string-utils is_palindrome "A man a plan a canal panama"
     - string-utils are_anagrams "listen" "silent"
     - string-utils word_count "one two three four"
@@ -86,7 +86,7 @@ build-astra:
     - cd /usr/src/gtest
     - cmake CMakeLists.txt
     - make
-    - cp *.a /usr/lib/
+    - cp libgtest*.a /usr/lib/
     - cd -
 
 build-redos:
@@ -111,6 +111,8 @@ unit-test-redos:
   needs:
     - job: build-redos
       artifacts: true
+  before_script:
+    - dnf install -y gtest-devel gmock-devel
 
 asan-test-astra:
   extends: .asan-test-template
@@ -127,6 +129,8 @@ asan-test-redos:
   needs:
     - job: build-redos
       artifacts: true
+  before_script:
+    - dnf install -y gtest-devel gmock-devel
 
 package-astra:
   stage: package

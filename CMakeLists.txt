@@ -18,12 +18,15 @@ find_package(GTest REQUIRED)
 add_executable(string_utils_test tests/string_utils_test.cpp)
 target_link_libraries(string_utils_test 
     string_utils_lib 
-    GTest::gtest_main
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
 )
 
 add_executable(asan_test tests/string_utils_test.cpp)
-target_link_libraries(asan_test string_utils_lib GTest::gtest_main)
+target_link_libraries(asan_test 
+    string_utils_lib 
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
 target_compile_options(asan_test PRIVATE -fsanitize=address -fno-omit-frame-pointer)
 target_link_options(asan_test PRIVATE -fsanitize=address)
-
-include(GoogleTest)
