@@ -36,10 +36,25 @@ namespace StringUtils {
 
     bool is_palindrome(const std::string& str) {
         if (str.empty()) return true;
+        
         size_t left = 0;
         size_t right = str.length() - 1;
+        
         while (left < right) {
-            if (str[left] != str[right]) return false;
+            while (left < right && !std::isalnum(static_cast<unsigned char>(str[left]))) {
+                left++;
+            }
+            while (left < right && !std::isalnum(static_cast<unsigned char>(str[right]))) {
+                right--;
+            }
+            
+            char left_char = std::tolower(static_cast<unsigned char>(str[left]));
+            char right_char = std::tolower(static_cast<unsigned char>(str[right]));
+            
+            if (left_char != right_char) {
+                return false;
+            }
+            
             left++;
             right--;
         }

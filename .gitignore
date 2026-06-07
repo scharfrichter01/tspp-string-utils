@@ -26,3 +26,6 @@ public/
 
 .DS_Store
 Thumbs.db
+
+
+.gitlab-ci.yml(reference).yml

@@ -1,73 +1,273 @@
-variables:
-  GIT_STRATEGY: clone
-  GIT_DEPTH: 20
-  GITLAB_TOKEN: $GIT_ACCESS_TOKEN
-  DEBIAN_FRONTEND: noninteractive
-
-before_script:
-  - git config --global url."http://oauth2:${GITLAB_TOKEN}@vgit.mirea.ru/".insteadOf "http://vgit.mirea.ru/"
-
 stages:
   - build
-  - test
-  - doxygen
-  - pages
+  - unit-test
+  - package
+  - package-test
+  - docs
 
-build:
+variables:
+  APP_NAME: string-utils
+  DEB_PACKAGE_NAME: "$APP_NAME"
+  DEB_PACKAGE_VER: "0.0.0"
+  RPM_PACKAGE_NAME: "$APP_NAME"
+  RPM_PACKAGE_VER: "0.0.0"
+
+# ---------- Шаблон сборки ----------
+.build-template:
   stage: build
-  tags:
-    - ubuntu
   script:
-    - apt-get update -qq
-    - apt-get install -y -qq cmake g++ make libgtest-dev
-    # Собираем GoogleTest из исходников (для Ubuntu)
-    - cd /usr/src/gtest
-    - cmake .
-    - make
-    - cp lib/*.a /usr/lib/ || true
-    - cd $CI_PROJECT_DIR
-    - mkdir -p build && cd build
-    - cmake ..
-    - cmake --build .
-  artifacts:
-    paths:
-      - build/string_utils_app
-    expire_in: 1 hour
-
-test:
-  stage: test
-  tags:
-    - ubuntu
-  script:
+    - mkdir -p build
     - cd build
-    - ctest --output-on-failure
-  dependencies:
-    - build
+    - cmake .. -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
+    - make
+  artifacts:
+    untracked: false
+    expire_in: 1 hour
+    paths:
+      - build/string_utils
+      - build/test
+      - build/asan_test
 
-doxygen:
-  stage: doxygen
-  tags:
-    - ubuntu
+# ---------- Обычные unit-тесты ----------
+.unit-test-template:
+  stage: unit-test
   script:
-    - apt-get update -qq
-    - apt-get install -y -qq doxygen graphviz
+    - ./build/test --gtest_output=xml:report.xml
+  artifacts:
+    expire_in: 1 hour
+    reports:
+      junit: report.xml
+
+# ---------- Asan-тесты с аннотацией сущностей ----------
+.asan-test-template:
+  stage: unit-test
+  script:
+    # 1. Запускаем asan-тесты
+    - ./build/asan_test --gtest_output=xml:asan_report.xml
+    # 2. Добавляем комментарий со списком функций в asan_report.xml
+    - |
+      if [ -f asan_report.xml ]; then
+        head -1 asan_report.xml > header.xml
+        tail -n +2 asan_report.xml > body.xml
+        {
+          cat header.xml
+          echo "<!-- Tested entities from string_utils.h: -->"
+          # ВАЖНО: Проверь путь к своему хедеру! У тебя он скорее всего в include/
+          grep -E '^[a-zA-Z_].+\(.*\);' ../include/string_utils.h | sed 's/^/    /' || echo "    (no functions found)"
+          echo "-->"
+          cat body.xml
+        } > asan_report_new.xml
+        mv asan_report_new.xml asan_report.xml
+        rm -f header.xml body.xml
+      else
+        echo "WARNING: asan_report.xml not found, skipping annotation"
+      fi
+  artifacts:
+    expire_in: 1 hour
+    reports:
+      junit: asan_report.xml
+
+# ---------- Проверка установки пакета ----------
+.package-test-template:
+  stage: package-test
+  script:
+    - $INSTALL_CMD
+    - $VERIFY_CMD
+    - $LIST_FILES_CMD
+    - string-utils trim "   hello world   "
+    - string-utils trim hello world
+    - string-utils split "a,b,c" ","
+    - string-utils split "a, b, c" ", "
+    - string-utils replace "this is a test" "is " "was "
+    - string-utils replace this is a test is was
+    - string-utils is_palindrome "A man a plan a canal panama"
+    - string-utils are_anagrams "listen" "silent"
+    - string-utils word_count "one two three four"
+
+# ========== Джобы сборки ==========
+build-astra:
+  extends: .build-template
+  tags:
+    - astra
+  before_script:
+    # У тебя find_package(GTest), поэтому ставим libgtest-dev
+    - sudo apt-get update && sudo apt-get install -y libgtest-dev cmake g++
+
+build-redos:
+  extends: .build-template
+  tags:
+    - redos
+  before_script:
+    # Для RedOS пакет называется gtest-devel
+    - sudo dnf install -y gtest-devel cmake gcc-c++
+
+# ========== Обычные unit-тесты ==========
+unit-test-astra:
+  extends: .unit-test-template
+  tags:
+    - astra
+  needs:
+    - job: build-astra
+      artifacts: true
+
+unit-test-redos:
+  extends: .unit-test-template
+  tags:
+    - redos
+  needs:
+    - job: build-redos
+      artifacts: true
+
+# ========== Asan-тесты ==========
+asan-test-astra:
+  extends: .asan-test-template
+  tags:
+    - astra
+  needs:
+    - job: build-astra
+      artifacts: true
+
+asan-test-redos:
+  extends: .asan-test-template
+  tags:
+    - redos
+  needs:
+    - job: build-redos
+      artifacts: true
+
+# ========== Упаковка ==========
+package-astra:
+  stage: package
+  tags:
+    - astra
+  needs:
+    - job: build-astra
+      artifacts: true
+    - job: unit-test-astra
+      artifacts: false
+    - job: asan-test-astra
+      artifacts: false
+  rules:
+    - if: "$CI_COMMIT_TAG"
+      variables:
+        DEB_PACKAGE_VER: "$CI_COMMIT_TAG"
+    - when: always
+      variables:
+        DEB_PACKAGE_VER: "0.0.0-$CI_COMMIT_SHORT_SHA"
+  script:
+    - mkdir -p "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/DEBIAN"
+    - mkdir -p "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin"
+    # Копируем из папки build
+    - cp build/string_utils "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin/string-utils"
+    - chmod 775 "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin/string-utils"
+    - |
+      cat > "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/DEBIAN/control" << EOF
+      Package: $DEB_PACKAGE_NAME
+      Version: $DEB_PACKAGE_VER
+      Section: utils
+      Priority: optional
+      Architecture: amd64
+      Depends: libc6 (>= 2.24), libstdc++6 (>= 5.2)
+      Maintainer: Dzhafarov Najmudin <dzhafarov.n.m@edu.mirea.ru>
+      Description: cli string utils
+       Package provides cli utlis: trim, split, replace, is_palindrome, are_anagrams, word_count.
+      EOF
+    - dpkg-deb --build "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER"
+  artifacts:
+    untracked: false
+    expire_in: 1 hour
+    name: "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER.deb"
+    paths:
+      - "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER.deb"
+
+package-redos:
+  stage: package
+  tags:
+    - redos
+  needs:
+    - job: unit-test-redos
+      artifacts: false
+    - job: asan-test-redos
+      artifacts: false
+    - job: build-redos
+      artifacts: true
+  rules:
+    - if: "$CI_COMMIT_TAG"
+      variables:
+        RPM_PACKAGE_VER: "$CI_COMMIT_TAG"
+    - when: always
+      variables:
+        RPM_PACKAGE_VER: "0.0.0_$CI_COMMIT_SHORT_SHA"
+  script:
+    - mkdir -p rpmbuild/SPECS rpmbuild/SOURCES
+    # Копируем из папки build
+    - cp build/string_utils rpmbuild/SOURCES/string-utils
+    - chmod 775 "rpmbuild/SOURCES/string-utils"
+    - |
+      cat > rpmbuild/SPECS/$RPM_PACKAGE_NAME.spec << EOF
+      Name: $RPM_PACKAGE_NAME
+      Version: $RPM_PACKAGE_VER
+      Release: 1%{?dist}
+      Summary: CLI string utilities
+      License: Unknown
+      Source0: string-utils
+
+      %description
+      CLI string utilities.
+
+      %install
+      mkdir -p %{buildroot}%{_bindir}
+      cp %{_sourcedir}/string-utils %{buildroot}%{_bindir}/%{name}
+
+      %files
+      %{_bindir}/%{name}
+      EOF
+    - rpmbuild -ba rpmbuild/SPECS/$RPM_PACKAGE_NAME.spec --define "_topdir $(pwd)/rpmbuild"
+    - cp rpmbuild/RPMS/x86_64/$RPM_PACKAGE_NAME-$RPM_PACKAGE_VER-1.*.rpm .
+  artifacts:
+    untracked: false
+    expire_in: 1 hour
+    name: "$RPM_PACKAGE_NAME-$RPM_PACKAGE_VER-1.*.rpm"
+    paths:
+      - "$RPM_PACKAGE_NAME-$RPM_PACKAGE_VER-1.*.rpm"
+
+# ========== Тесты установки пакетов ==========
+package-test-redos:
+  extends: .package-test-template
+  tags:
+    - redos
+  needs:
+    - job: package-redos
+      artifacts: true
+  variables:
+    INSTALL_CMD: "sudo dnf install -y ./string-utils-*.rpm"
+    VERIFY_CMD: "rpm -q string-utils"
+    LIST_FILES_CMD: "rpm -ql string-utils"
+
+package-test-astra:
+  extends: .package-test-template
+  tags:
+    - astra
+  needs:
+    - job: package-astra
+      artifacts: true
+  variables:
+    INSTALL_CMD: "sudo apt install -y ./string-utils-*.deb"
+    VERIFY_CMD: "dpkg -s string-utils"
+    LIST_FILES_CMD: "dpkg -L string-utils"
+
+# ========== Документация ==========
+doxygen:
+  stage: docs
+  tags:
+    - astra
+  before_script:
+    # У тебя в Doxyfile HAVE_DOT = YES, поэтому ставим graphviz
+    - sudo apt-get update && sudo apt-get install -y doxygen graphviz
+  script:
     - doxygen Doxyfile
   artifacts:
+    untracked: false
+    expire_in: 7 days
     paths:
-      - doc/html
-    expire_in: 1 week
-
-pages:
-  stage: pages
-  tags:
-    - ubuntu
-  script:
-    - mkdir -p public
-    - cp -r doc/html/* public/
-  artifacts:
-    paths:
-      - public
-  dependencies:
-    - doxygen
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      - ./doc/html

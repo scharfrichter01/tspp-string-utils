@@ -10,17 +10,17 @@ enable_testing()
 add_library(string_utils_lib src/string_utils.cpp)
 target_include_directories(string_utils_lib PUBLIC include)
 
-add_executable(string_utils_app src/main.cpp)
-target_link_libraries(string_utils_app PRIVATE string_utils_lib)
+add_executable(string_utils src/main.cpp)
+target_link_libraries(string_utils PRIVATE string_utils_lib)
 
-# Ищем GoogleTest в системе вместо добавления subdirectory
 find_package(GTest REQUIRED)
 
-add_executable(string_utils_test tests/string_utils_test.cpp)
-target_link_libraries(string_utils_test 
-    string_utils_lib 
-    GTest::gtest_main
-)
+add_executable(test tests/string_utils_test.cpp)
+target_link_libraries(test string_utils_lib GTest::gtest_main)
+
+add_executable(asan_test tests/string_utils_test.cpp)
+target_link_libraries(asan_test string_utils_lib GTest::gtest_main)
+target_compile_options(asan_test PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+target_link_options(asan_test PRIVATE -fsanitize=address)
 
 include(GoogleTest)
-gtest_discover_tests(string_utils_test)
