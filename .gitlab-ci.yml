@@ -42,9 +42,7 @@ variables:
 .asan-test-template:
   stage: unit-test
   script:
-    # 1. Запускаем asan-тесты
     - ./build/asan_test --gtest_output=xml:asan_report.xml
-    # 2. Добавляем комментарий со списком функций в asan_report.xml
     - |
       if [ -f asan_report.xml ]; then
         head -1 asan_report.xml > header.xml
@@ -52,7 +50,6 @@ variables:
         {
           cat header.xml
           echo "<!-- Tested entities from string_utils.h: -->"
-          # ВАЖНО: Проверь путь к своему хедеру! У тебя он скорее всего в include/
           grep -E '^[a-zA-Z_].+\(.*\);' ../include/string_utils.h | sed 's/^/    /' || echo "    (no functions found)"
           echo "-->"
           cat body.xml
@@ -90,16 +87,21 @@ build-astra:
   tags:
     - astra
   before_script:
-    # У тебя find_package(GTest), поэтому ставим libgtest-dev
-    - sudo apt-get update && sudo apt-get install -y libgtest-dev cmake g++
+    # В Astra libgtest-dev содержит только исходники, компилируем их
+    - apt-get update && apt-get install -y libgtest-dev cmake g++
+    - cd /usr/src/gtest
+    - cmake CMakeLists.txt
+    - make
+    - cp lib/*.a /usr/lib
+    - cd -
 
 build-redos:
   extends: .build-template
   tags:
     - redos
   before_script:
-    # Для RedOS пакет называется gtest-devel
-    - sudo dnf install -y gtest-devel cmake gcc-c++
+    # В RedOS нет sudo, запускаем от root
+    - dnf install -y gtest-devel cmake gcc-c++
 
 # ========== Обычные unit-тесты ==========
 unit-test-astra:
@@ -144,9 +146,7 @@ package-astra:
     - job: build-astra
       artifacts: true
     - job: unit-test-astra
-      artifacts: false
     - job: asan-test-astra
-      artifacts: false
   rules:
     - if: "$CI_COMMIT_TAG"
       variables:
@@ -157,7 +157,6 @@ package-astra:
   script:
     - mkdir -p "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/DEBIAN"
     - mkdir -p "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin"
-    # Копируем из папки build
     - cp build/string_utils "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin/string-utils"
     - chmod 775 "$DEB_PACKAGE_NAME-$DEB_PACKAGE_VER/usr/local/bin/string-utils"
     - |
@@ -185,12 +184,10 @@ package-redos:
   tags:
     - redos
   needs:
-    - job: unit-test-redos
-      artifacts: false
-    - job: asan-test-redos
-      artifacts: false
     - job: build-redos
       artifacts: true
+    - job: unit-test-redos
+    - job: asan-test-redos
   rules:
     - if: "$CI_COMMIT_TAG"
       variables:
@@ -200,7 +197,6 @@ package-redos:
         RPM_PACKAGE_VER: "0.0.0_$CI_COMMIT_SHORT_SHA"
   script:
     - mkdir -p rpmbuild/SPECS rpmbuild/SOURCES
-    # Копируем из папки build
     - cp build/string_utils rpmbuild/SOURCES/string-utils
     - chmod 775 "rpmbuild/SOURCES/string-utils"
     - |
@@ -240,7 +236,7 @@ package-test-redos:
     - job: package-redos
       artifacts: true
   variables:
-    INSTALL_CMD: "sudo dnf install -y ./string-utils-*.rpm"
+    INSTALL_CMD: "dnf install -y ./string-utils-*.rpm"
     VERIFY_CMD: "rpm -q string-utils"
     LIST_FILES_CMD: "rpm -ql string-utils"
 
@@ -252,7 +248,7 @@ package-test-astra:
     - job: package-astra
       artifacts: true
   variables:
-    INSTALL_CMD: "sudo apt install -y ./string-utils-*.deb"
+    INSTALL_CMD: "apt install -y ./string-utils-*.deb"
     VERIFY_CMD: "dpkg -s string-utils"
     LIST_FILES_CMD: "dpkg -L string-utils"
 
@@ -262,8 +258,7 @@ doxygen:
   tags:
     - astra
   before_script:
-    # У тебя в Doxyfile HAVE_DOT = YES, поэтому ставим graphviz
-    - sudo apt-get update && sudo apt-get install -y doxygen graphviz
+    - apt-get update && apt-get install -y doxygen graphviz
   script:
     - doxygen Doxyfile
   artifacts:
