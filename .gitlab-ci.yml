@@ -87,12 +87,13 @@ build-astra:
   tags:
     - astra
   before_script:
-    # В Astra libgtest-dev содержит только исходники, компилируем их
+    # Собираем GTest из исходников
     - apt-get update && apt-get install -y libgtest-dev cmake g++
     - cd /usr/src/gtest
     - cmake CMakeLists.txt
     - make
-    - cp lib/*.a /usr/lib
+    # Копируем библиотеки (они лежат прямо в /usr/src/gtest, не в lib/)
+    - cp *.a /usr/lib/
     - cd -
 
 build-redos:
@@ -100,8 +101,8 @@ build-redos:
   tags:
     - redos
   before_script:
-    # В RedOS нет sudo, запускаем от root
-    - dnf install -y gtest-devel cmake gcc-c++
+    # Устанавливаем gmock-devel тоже, иначе CMake ругается
+    - dnf install -y gtest-devel gmock-devel cmake gcc-c++
 
 # ========== Обычные unit-тесты ==========
 unit-test-astra:
